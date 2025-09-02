@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { JournalPhoto, ProfileState } from '../types';
 import { loadAll, saveAll, loadProfile, saveProfile, migrateDataToUser } from '../storage';
 import { useAuth } from './AuthProvider';
+import { saveImageToLocal } from '../fileManager';
 
 type Ctx = {
   photos: JournalPhoto[];
@@ -75,9 +76,14 @@ export default function JournalProvider({ children }: { children: React.ReactNod
     }
   }, [profile, user, isAuthenticated]);
 
-  const addPhoto = (p: JournalPhoto) => {
-    if (!isAuthenticated) return;
-    setPhotos(prev => [p, ...prev]);
+  const addPhoto = async (p: JournalPhoto) => {
+    if (!isAuthenticated || !user) return;
+    // Copier l'image dans un chemin persistant
+    const localPath = await saveImageToLocal(p.uri);
+    if (!localPath) return;
+
+    const newPhoto = { ...p, uri: localPath };
+    setPhotos(prev => [newPhoto, ...prev]);
   };
 
   const removePhoto = (id: string) => {
