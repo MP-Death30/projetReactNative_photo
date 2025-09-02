@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useAuth } from '../context/AuthProvider';
+import { globalStyles, colors, spacing, borderRadius, typography } from '../styles/globalStyles';
 
 export default function LoginScreen() {
   const { login, register, isLoading } = useAuth();
@@ -49,11 +50,11 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.form}>
-          <Text style={styles.title}>
+        <View style={[globalStyles.card, styles.form]}>
+          <Text style={[globalStyles.h1, styles.title]}>
             {isLoginMode ? 'Connexion' : 'Créer un compte'}
           </Text>
-          <Text style={styles.subtitle}>
+          <Text style={[globalStyles.bodySmall, styles.subtitle]}>
             {isLoginMode 
               ? 'Connectez-vous à votre journal de voyage' 
               : 'Créez votre journal de voyage personnel'
@@ -61,10 +62,10 @@ export default function LoginScreen() {
           </Text>
 
           {!isLoginMode && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nom</Text>
+            <View style={globalStyles.inputGroup}>
+              <Text style={globalStyles.label}>Nom</Text>
               <TextInput
-                style={styles.input}
+                style={globalStyles.input}
                 value={name}
                 onChangeText={setName}
                 placeholder="Votre nom"
@@ -73,10 +74,10 @@ export default function LoginScreen() {
             </View>
           )}
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
+          <View style={globalStyles.inputGroup}>
+            <Text style={globalStyles.label}>Email</Text>
             <TextInput
-              style={styles.input}
+              style={globalStyles.input}
               value={email}
               onChangeText={setEmail}
               placeholder="votre@email.com"
@@ -86,10 +87,10 @@ export default function LoginScreen() {
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Mot de passe</Text>
+          <View style={globalStyles.inputGroup}>
+            <Text style={globalStyles.label}>Mot de passe</Text>
             <TextInput
-              style={styles.input}
+              style={globalStyles.input}
               value={password}
               onChangeText={setPassword}
               placeholder="Votre mot de passe"
@@ -99,11 +100,11 @@ export default function LoginScreen() {
           </View>
 
           <Pressable 
-            style={[styles.button, isLoading && styles.buttonDisabled]}
+            style={[globalStyles.button, isLoading && styles.buttonDisabled]}
             onPress={handleSubmit}
             disabled={isLoading}
           >
-            <Text style={styles.buttonText}>
+            <Text style={globalStyles.buttonText}>
               {isLoading 
                 ? 'Chargement...' 
                 : isLoginMode 
@@ -126,80 +127,3 @@ export default function LoginScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  form: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 8,
-    color: '#1f2937',
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    color: '#6b7280',
-    marginBottom: 32,
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    backgroundColor: '#f9fafb',
-  },
-  button: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    backgroundColor: '#9ca3af',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  switchButton: {
-    marginTop: 24,
-    paddingVertical: 12,
-  },
-  switchButtonText: {
-    color: '#2563eb',
-    fontSize: 16,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-});

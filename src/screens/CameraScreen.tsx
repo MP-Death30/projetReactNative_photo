@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, Image, StyleSheet, Alert, Platform } from 'react-native';
+import { View, Text, Image, Alert, Platform, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import Button from '../Components/Button';
 import { todayISO, JournalPhoto } from '../types';
 import { useJournal } from '../context/JournalProvider';
+import { globalStyles, spacing } from '../styles/globalStyles';
 
 export default function CameraScreen() {
   const { addPhoto } = useJournal();
@@ -30,16 +31,13 @@ export default function CameraScreen() {
     const loc = await Location.requestForegroundPermissionsAsync();
     if (loc.status === 'granted') {
       try {
-        const pos = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const rev = await Location.reverseGeocodeAsync({
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
         });
         const first = rev?.[0];
-        locationName =
-          first?.city || first?.subregion || first?.region || null;
+        locationName = first?.city || first?.subregion || first?.region || null;
       } catch {}
     }
 
@@ -57,27 +55,18 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Partie centrale avec aperçu */}
       <View style={styles.content}>
         {preview && (
           <View style={{ alignItems: 'center' }}>
-            <Image
-              source={{ uri: preview }}
-              style={{ width: 240, height: 240, borderRadius: 16 }}
-            />
-            <Text style={{ marginTop: 8, color: '#6b7280' }}>
-              Dernier aperçu
-            </Text>
+            <Image source={{ uri: preview }} style={{ width: 240, height: 240, borderRadius: 16 }} />
+            <Text style={{ marginTop: spacing.s, color: '#6b7280' }}>Dernier aperçu</Text>
           </View>
         )}
         {Platform.OS === 'web' && (
-          <Text style={{ marginTop: 10, color: '#6b7280' }}>
-            (Sur web, dépend du navigateur)
-          </Text>
+          <Text style={{ marginTop: spacing.s, color: '#6b7280' }}>(Sur web, dépend du navigateur)</Text>
         )}
       </View>
 
-      {/* Bouton fixé en bas */}
       <View style={styles.footer}>
         <Button title="📷 Prendre une photo" onPress={takePhoto} />
       </View>
@@ -86,17 +75,7 @@ export default function CameraScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    padding: 16, 
-    justifyContent: 'space-between' // pousse le footer en bas
-  },
-  content: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  footer: { 
-    paddingVertical: 12 
-  },
+  container: { flex: 1, padding: spacing.m, justifyContent: 'space-between' },
+  content: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  footer: { paddingVertical: spacing.m },
 });

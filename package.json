@@ -13,6 +13,7 @@
     "@react-navigation/bottom-tabs": "*",
     "@react-navigation/native": "*",
     "expo": "~53.0.22",
+    "expo-file-system": "~18.1.11",
     "expo-image-picker": "~16.1.4",
     "expo-location": "~18.1.6",
     "expo-status-bar": "~2.2.3",
@@ -27,7 +28,7 @@
     "react-native-permissions": "*",
     "react-native-safe-area-context": "^5.4.0",
     "react-native-screens": "~4.11.1",
-    "expo-file-system": "~18.1.11"
+    "react-native-status-bar-height": "^2.6.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
