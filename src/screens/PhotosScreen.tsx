@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, TextInput, FlatList, StyleSheet, Alert } from 'react-native';
 import PhotoRow from '../Components/PhotoRow';
-import type { JournalPhoto } from '../types';
+import { JournalPhoto } from '../types';
 import { useJournal } from '../context/JournalProvider';
+import { globalStyles, spacing, colors, borderRadius } from '../styles/globalStyles';
 
 export default function PhotosScreen() {
   const { photos, removePhoto, updatePhoto } = useJournal();
@@ -10,30 +11,12 @@ export default function PhotosScreen() {
   const [title, setTitle] = useState('');
   const [note, setNote] = useState('');
 
-  // Ouvrir le formulaire d’édition
-  const openEdit = (p: JournalPhoto) => {
-    setEditing(p);
-    setTitle(p.title || '');
-    setNote(p.note || '');
-  };
-
-  // Sauvegarder les modifications
-  const saveEdit = () => {
-    if (!editing) return;
-    updatePhoto(editing.id, { title, note }); // ici on utilise bien le provider
-    setEditing(null);
-  };
-
-  // Supprimer une photo
-  const confirmRemove = (id: string) => {
-    Alert.alert('Supprimer', 'Confirmer ?', [
-      { text: 'Annuler' },
-      { text: 'Supprimer', style: 'destructive', onPress: () => removePhoto(id) },
-    ]);
-  };
+  const openEdit = (p: JournalPhoto) => { setEditing(p); setTitle(p.title || ''); setNote(p.note || ''); };
+  const saveEdit = () => { if (!editing) return; updatePhoto(editing.id, { title, note }); setEditing(null); };
+  const confirmRemove = (id: string) => { Alert.alert('Supprimer', 'Confirmer ?', [{ text: 'Annuler' }, { text: 'Supprimer', style: 'destructive', onPress: () => removePhoto(id) }]); };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={globalStyles.container}>
       <FlatList
         data={photos}
         keyExtractor={i => i.id}
@@ -44,10 +27,7 @@ export default function PhotosScreen() {
               <Pressable style={styles.smallBtn} onPress={() => openEdit(item)}>
                 <Text style={styles.smallBtnText}>Éditer</Text>
               </Pressable>
-              <Pressable
-                style={[styles.smallBtn, { backgroundColor: '#ef4444' }]}
-                onPress={() => confirmRemove(item.id)}
-              >
+              <Pressable style={[styles.smallBtn, { backgroundColor: colors.danger }]} onPress={() => confirmRemove(item.id)}>
                 <Text style={styles.smallBtnText}>Supprimer</Text>
               </Pressable>
             </View>
@@ -58,24 +38,16 @@ export default function PhotosScreen() {
 
       {editing && (
         <View style={styles.editor}>
-          <Text style={styles.h2}>Éditer</Text>
+          <Text style={globalStyles.h2}>Éditer</Text>
           <Text>Titre</Text>
-          <TextInput value={title} onChangeText={setTitle} style={styles.input} />
+          <TextInput value={title} onChangeText={setTitle} style={globalStyles.input} />
           <Text>Note</Text>
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            style={[styles.input, { height: 80 }]}
-            multiline
-          />
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TextInput value={note} onChangeText={setNote} style={[globalStyles.input, { height: 80 }]} multiline />
+          <View style={{ flexDirection: 'row', gap: spacing.s }}>
             <Pressable style={styles.smallBtn} onPress={() => setEditing(null)}>
               <Text style={styles.smallBtnText}>Annuler</Text>
             </Pressable>
-            <Pressable
-              style={[styles.smallBtn, { backgroundColor: '#10b981' }]}
-              onPress={saveEdit}
-            >
+            <Pressable style={[styles.smallBtn, { backgroundColor: colors.success }]} onPress={saveEdit}>
               <Text style={styles.smallBtnText}>Enregistrer</Text>
             </Pressable>
           </View>
@@ -86,10 +58,8 @@ export default function PhotosScreen() {
 }
 
 const styles = StyleSheet.create({
-  rowActions: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingBottom: 12 },
-  smallBtn: { backgroundColor: '#334155', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
-  smallBtnText: { color: 'white', fontWeight: '700' },
-  h2: { fontSize: 16, fontWeight: '700', marginBottom: 6 },
-  input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 10, backgroundColor: 'white' },
-  editor: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'white', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16, gap: 8, elevation: 10 },
+  rowActions: { flexDirection: 'row', gap: spacing.s, paddingHorizontal: spacing.m, paddingBottom: spacing.m },
+  smallBtn: { backgroundColor: colors.dark, paddingHorizontal: spacing.m, paddingVertical: spacing.s, borderRadius: borderRadius.m },
+  smallBtnText: { color: colors.white, fontWeight: '700' },
+  editor: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.white, borderTopLeftRadius: borderRadius.l, borderTopRightRadius: borderRadius.l, padding: spacing.m, gap: spacing.s, elevation: 10 },
 });
