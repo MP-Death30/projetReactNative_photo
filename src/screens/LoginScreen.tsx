@@ -4,14 +4,15 @@ import {
   Text,
   TextInput,
   Pressable,
-  StyleSheet,
   Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
 } from 'react-native';
 import { useAuth } from '../context/AuthProvider';
-import { globalStyles, colors, spacing, borderRadius, typography } from '../styles/globalStyles';
+import { validatePassword } from '../utils/passwordValidator';
+import { globalStyles, colors } from '../styles/globalStyles';
 
 export default function LoginScreen() {
   const { login, register, isLoading } = useAuth();
@@ -26,6 +27,18 @@ export default function LoginScreen() {
       return;
     }
 
+    // Validation de complexité uniquement en création de compte
+    if (!isLoginMode) {
+      const { valid, errors } = validatePassword(password);
+      if (!valid) {
+        Alert.alert(
+          'Mot de passe invalide',
+          `Le mot de passe doit respecter les règles suivantes :\n\n• ${errors.join('\n• ')}`
+        );
+        return;
+      }
+    }
+
     try {
       if (isLoginMode) {
         await login({ email, password });
@@ -33,7 +46,10 @@ export default function LoginScreen() {
         await register({ email, password, name });
       }
     } catch (error) {
-      Alert.alert('Erreur', error instanceof Error ? error.message : 'Une erreur est survenue');
+      Alert.alert(
+        'Erreur',
+        error instanceof Error ? error.message : 'Une erreur est survenue'
+      );
     }
   };
 
@@ -46,21 +62,25 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView 
-      style={styles.container} 
+      style={globalStyles.container} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={[globalStyles.card, styles.form]}>
-          <Text style={[globalStyles.h1, styles.title]}>
+        <View style={globalStyles.card}>
+          {/* Titre */}
+          <Text style={globalStyles.h1}>
             {isLoginMode ? 'Connexion' : 'Créer un compte'}
           </Text>
-          <Text style={[globalStyles.bodySmall, styles.subtitle]}>
+
+          {/* Sous-titre */}
+          <Text style={globalStyles.bodySmall}>
             {isLoginMode 
               ? 'Connectez-vous à votre journal de voyage' 
               : 'Créez votre journal de voyage personnel'
             }
           </Text>
 
+          {/* Nom (création compte) */}
           {!isLoginMode && (
             <View style={globalStyles.inputGroup}>
               <Text style={globalStyles.label}>Nom</Text>
@@ -74,6 +94,7 @@ export default function LoginScreen() {
             </View>
           )}
 
+          {/* Email */}
           <View style={globalStyles.inputGroup}>
             <Text style={globalStyles.label}>Email</Text>
             <TextInput
@@ -87,6 +108,7 @@ export default function LoginScreen() {
             />
           </View>
 
+          {/* Mot de passe */}
           <View style={globalStyles.inputGroup}>
             <Text style={globalStyles.label}>Mot de passe</Text>
             <TextInput
@@ -99,6 +121,7 @@ export default function LoginScreen() {
             />
           </View>
 
+          {/* Bouton principal */}
           <Pressable 
             style={[globalStyles.button, isLoading && styles.buttonDisabled]}
             onPress={handleSubmit}
@@ -114,6 +137,7 @@ export default function LoginScreen() {
             </Text>
           </Pressable>
 
+          {/* Basculer mode login / création compte */}
           <Pressable style={styles.switchButton} onPress={toggleMode}>
             <Text style={styles.switchButtonText}>
               {isLoginMode 
@@ -127,3 +151,24 @@ export default function LoginScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  buttonDisabled: {
+    backgroundColor: '#9ca3af',
+  },
+  switchButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+  },
+  switchButtonText: {
+    color: colors.primary,
+    fontSize: 16,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+});
