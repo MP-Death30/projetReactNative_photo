@@ -2,10 +2,12 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { View, Text, TextInput, Image, Pressable, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useJournal } from '../context/JournalProvider';
+import { useAuth } from '../auth/AuthProvider';
 import DefaultAvatar from '../../assets/default-avatar.png';
 
 export default function ProfileScreen() {
   const { photos, profile, setProfile } = useJournal();
+  const { logout } = useAuth(); // 👈 import du logout
   const [name, setName] = useState(profile.name);
   useEffect(() => { setName(profile.name); }, [profile.name]);
 
@@ -17,7 +19,12 @@ export default function ProfileScreen() {
   const changeAvatar = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (perm.status !== 'granted') return;
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1, allowsEditing: true, aspect: [1,1] });
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+      allowsEditing: true,
+      aspect: [1,1]
+    });
     if (res.canceled || !res.assets?.[0]?.uri) return;
     setProfile({ ...profile, avatarUri: res.assets[0].uri });
   };
@@ -33,7 +40,10 @@ export default function ProfileScreen() {
 
       <Text style={{ marginTop: 12 }}>Nom</Text>
       <TextInput value={name} onChangeText={setName} style={styles.input} placeholder="Votre nom" />
-      <Pressable style={[styles.smallBtn, { alignSelf: 'flex-start', backgroundColor: '#2563eb' }]} onPress={() => setProfile({ ...profile, name })}>
+      <Pressable
+        style={[styles.smallBtn, { alignSelf: 'flex-start', backgroundColor: '#2563eb' }]}
+        onPress={() => setProfile({ ...profile, name })}
+      >
         <Text style={styles.smallBtnText}>Enregistrer le nom</Text>
       </Pressable>
 
@@ -42,6 +52,13 @@ export default function ProfileScreen() {
         <Text>Photos : {stats.total}</Text>
         <Text>Jours couverts : {stats.days}</Text>
       </View>
+      
+      <Pressable
+        style={[styles.smallBtn, { backgroundColor: '#ef4444', marginTop: 20 }]}
+        onPress={logout}
+      >
+        <Text style={styles.smallBtnText}>Se déconnecter</Text>
+      </Pressable>
     </View>
   );
 }

@@ -23,6 +23,7 @@
     "react-native-permissions": "*",
     "react-native-image-picker": "*",
     "@react-navigation/bottom-tabs": "*",
+    "@react-navigation/native-stack": "*",
     "react-native-safe-area-context": "5.4.0",
     "react-native-geolocation-service": "*",
     "@react-native-async-storage/async-storage": "2.1.2"
