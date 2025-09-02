@@ -7,7 +7,7 @@ import { todayISO, JournalPhoto } from '../types';
 import { useJournal } from '../context/JournalProvider';
 
 export default function CameraScreen() {
-  const { addPhoto } = useJournal(); // ✅ on récupère addPhoto du provider
+  const { addPhoto } = useJournal();
   const [preview, setPreview] = useState<string | null>(null);
 
   const takePhoto = async () => {
@@ -51,33 +51,52 @@ export default function CameraScreen() {
       locationName,
     };
 
-    addPhoto(item); // ✅ mise à jour du state global + stockage
+    addPhoto(item);
     Alert.alert('OK', 'Photo ajoutée !');
   };
 
   return (
     <View style={styles.container}>
-      <Button title="📷 Prendre une photo" onPress={takePhoto} />
-      {preview && (
-        <View style={{ marginTop: 16, alignItems: 'center' }}>
-          <Image
-            source={{ uri: preview }}
-            style={{ width: 240, height: 240, borderRadius: 16 }}
-          />
-          <Text style={{ marginTop: 8, color: '#6b7280' }}>
-            Dernier aperçu
+      {/* Partie centrale avec aperçu */}
+      <View style={styles.content}>
+        {preview && (
+          <View style={{ alignItems: 'center' }}>
+            <Image
+              source={{ uri: preview }}
+              style={{ width: 240, height: 240, borderRadius: 16 }}
+            />
+            <Text style={{ marginTop: 8, color: '#6b7280' }}>
+              Dernier aperçu
+            </Text>
+          </View>
+        )}
+        {Platform.OS === 'web' && (
+          <Text style={{ marginTop: 10, color: '#6b7280' }}>
+            (Sur web, dépend du navigateur)
           </Text>
-        </View>
-      )}
-      {Platform.OS === 'web' && (
-        <Text style={{ marginTop: 10, color: '#6b7280' }}>
-          (Sur web, dépend du navigateur)
-        </Text>
-      )}
+        )}
+      </View>
+
+      {/* Bouton fixé en bas */}
+      <View style={styles.footer}>
+        <Button title="📷 Prendre une photo" onPress={takePhoto} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
+  container: { 
+    flex: 1, 
+    padding: 16, 
+    justifyContent: 'space-between' // pousse le footer en bas
+  },
+  content: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  footer: { 
+    paddingVertical: 12 
+  },
 });
