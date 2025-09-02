@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { View, Text, TextInput, Image, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, Image, Pressable, StyleSheet, Alert, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useJournal } from '../context/JournalProvider';
 import { useAuth } from '../context/AuthProvider';
@@ -85,15 +85,15 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <ScrollView style={styles.container}>
+      <View style={[styles.section, styles.header]}>
         <Text style={styles.h1}>Profil</Text>
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Se déconnecter</Text>
         </Pressable>
       </View>
 
-      <View style={styles.userInfo}>
+      <View style={[styles.section, styles.userInfo]}>
         <Pressable onPress={changeAvatar} style={{ alignSelf: 'center' }}>
           <Image 
             source={profile.avatarUri ? { uri: profile.avatarUri } : DefaultAvatar} 
@@ -110,7 +110,7 @@ export default function ProfileScreen() {
         )}
       </View>
 
-      <View style={styles.nameSection}>
+      <View style={[styles.section, styles.nameSection]}>
         <Text style={styles.inputLabel}>Nom</Text>
         <TextInput 
           value={name} 
@@ -126,7 +126,7 @@ export default function ProfileScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.card}>
+      <View style={[styles.section, styles.card]}>
         <Text style={styles.h2}>Statistiques</Text>
         <View style={styles.statRow}>
           <Text style={styles.statLabel}>Photos :</Text>
@@ -145,7 +145,7 @@ export default function ProfileScreen() {
           </View>
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -233,4 +233,9 @@ const styles = StyleSheet.create({
   },
   statLabel: { fontSize: 16, color: '#6b7280' },
   statValue: { fontSize: 16, fontWeight: '600', color: '#374151' },
+
+  section: {
+    marginBottom: 24, // espace entre les blocs
+  },
+
 });
