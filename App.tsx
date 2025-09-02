@@ -134,7 +134,7 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff', // évite que le notch/barre système soit noir
+    backgroundColor: '#000000ff',
   },
   loadingContainer: {
     flex: 1,
