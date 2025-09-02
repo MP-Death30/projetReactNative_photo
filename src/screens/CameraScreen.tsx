@@ -2,33 +2,44 @@ import React, { useState } from 'react';
 import { View, Text, Image, StyleSheet, Alert, Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { useJournal } from '../context/JournalProvider';
-import { todayISO, JournalPhoto } from '../types';
 import Button from '../Components/Button';
+import { todayISO, JournalPhoto } from '../types';
+import { useJournal } from '../context/JournalProvider';
 
 export default function CameraScreen() {
-  const { addPhoto } = useJournal();
+  const { addPhoto } = useJournal(); // ✅ on récupère addPhoto du provider
   const [preview, setPreview] = useState<string | null>(null);
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Caméra', 'Autorise la caméra.'); return; }
+    if (status !== 'granted') {
+      Alert.alert('Caméra', 'Autorise la caméra.');
+      return;
+    }
 
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1 });
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+    });
     if (result.canceled || !result.assets?.[0]?.uri) return;
 
     const uri = result.assets[0].uri;
     setPreview(uri);
 
-    // Ville (reverse geocoding) — pas de coordonnées stockées
     let locationName: string | null = null;
     const loc = await Location.requestForegroundPermissionsAsync();
     if (loc.status === 'granted') {
       try {
-        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const rev = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const rev = await Location.reverseGeocodeAsync({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+        });
         const first = rev?.[0];
-        locationName = first?.city || first?.subregion || first?.region || null;
+        locationName =
+          first?.city || first?.subregion || first?.region || null;
       } catch {}
     }
 
@@ -39,7 +50,8 @@ export default function CameraScreen() {
       dateISO: todayISO(),
       locationName,
     };
-    addPhoto(item);
+
+    addPhoto(item); // ✅ mise à jour du state global + stockage
     Alert.alert('OK', 'Photo ajoutée !');
   };
 
@@ -48,11 +60,20 @@ export default function CameraScreen() {
       <Button title="📷 Prendre une photo" onPress={takePhoto} />
       {preview && (
         <View style={{ marginTop: 16, alignItems: 'center' }}>
-          <Image source={{ uri: preview }} style={{ width: 240, height: 240, borderRadius: 16 }} />
-          <Text style={{ marginTop: 8, color: '#6b7280' }}>Dernier aperçu</Text>
+          <Image
+            source={{ uri: preview }}
+            style={{ width: 240, height: 240, borderRadius: 16 }}
+          />
+          <Text style={{ marginTop: 8, color: '#6b7280' }}>
+            Dernier aperçu
+          </Text>
         </View>
       )}
-      {Platform.OS === 'web' && <Text style={{ marginTop: 10, color: '#6b7280' }}>(Sur web, dépend du navigateur)</Text>}
+      {Platform.OS === 'web' && (
+        <Text style={{ marginTop: 10, color: '#6b7280' }}>
+          (Sur web, dépend du navigateur)
+        </Text>
+      )}
     </View>
   );
 }
