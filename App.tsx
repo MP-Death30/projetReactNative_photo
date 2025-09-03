@@ -12,7 +12,7 @@ import CameraScreen from './src/screens/CameraScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import PhotosScreen from './src/screens/PhotosScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-import MapScreen from './src/screens/MapScreen';
+import MapScreen from './src/screens/MapTest';
 
 import { colors } from './src/styles/globalStyles'; // ✅ import styles navigation
 import { navigationStyles } from './src/styles/navigationStyles';
