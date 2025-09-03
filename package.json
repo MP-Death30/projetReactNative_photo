@@ -10,6 +10,7 @@
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "2.1.2",
+    "@react-native-community/netinfo": "^11.4.1",
     "@react-navigation/bottom-tabs": "*",
     "@react-navigation/native": "*",
     "expo": "~53.0.22",
@@ -17,6 +18,7 @@
     "expo-image-picker": "~16.1.4",
     "expo-location": "~18.1.6",
     "expo-status-bar": "~2.2.3",
+    "firebase": "^12.2.1",
     "react": "19.0.0",
     "react-native": "0.79.6",
     "react-native-calendars": "*",
