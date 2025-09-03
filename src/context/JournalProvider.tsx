@@ -1,10 +1,10 @@
-// src/context/JournalProvider.tsx - Version avec synchronisation
+// src/context/JournalProvider.tsx - Version Firebase
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { JournalPhoto, ProfileState, SyncResult, SyncStatus } from '../types';
 import { loadAll, saveAll, loadProfile, saveProfile, migrateDataToUser } from '../storage';
 import { useAuth } from './AuthProvider';
 import { saveImageToLocal } from '../fileManager';
-import JournalSyncService from '../services/syncService';
+import { FirebaseSyncService } from '../services/firebaseSyncService';
 import { createJournalPhoto, createInitialProfile } from '../types';
 
 type SyncState = {
@@ -28,10 +28,11 @@ type JournalContextType = {
   updatePhoto: (id: string, patch: Partial<JournalPhoto>) => void;
   setProfile: (p: Partial<ProfileState>) => void;
   
-  // 🆕 Fonctionnalités de sync
+  // 🆕 Fonctionnalités de sync Firebase
   syncState: SyncState;
   syncNow: () => Promise<SyncResult>;
   enableAutoSync: (enabled: boolean) => void;
+  enableRealTimeSync: (enabled: boolean) => void;
   resolveConflict: (photoId: string, resolution: 'keepLocal' | 'keepServer') => Promise<void>;
   
   // 🆕 Indicateurs visuels
@@ -57,7 +58,7 @@ export default function JournalProvider({ children }: { children: React.ReactNod
   const [profile, setProfileState] = useState<ProfileState>(createInitialProfile());
   const [isLoading, setIsLoading] = useState(false);
   
-  // 🆕 État de synchronisation
+  // 🆕 État de synchronisation Firebase
   const [syncState, setSyncState] = useState<SyncState>({
     isOnline: false,
     isSyncing: false,
@@ -67,61 +68,86 @@ export default function JournalProvider({ children }: { children: React.ReactNod
     conflictCount: 0,
   });
   
-  // 🆕 Service de sync
-  const [syncService, setSyncService] = useState<JournalSyncService | null>(null);
-  const [autoSyncStopFunction, setAutoSyncStopFunction] = useState<(() => void) | null>(null);
+  // 🆕 Service de sync Firebase
+  const [firebaseSyncService, setFirebaseSyncService] = useState<FirebaseSyncService | null>(null);
+  const [autoSyncInterval, setAutoSyncInterval] = useState<NodeJS.Timeout | null>(null);
+  const [realtimeSyncEnabled, setRealtimeSyncEnabled] = useState(false);
 
-  // Initialiser le service de sync quand l'utilisateur se connecte
+  // Initialiser le service Firebase quand l'utilisateur se connecte
   useEffect(() => {
     if (isAuthenticated && user) {
-      const service = new JournalSyncService({
-        apiUrl: 'https://your-api-url.com/api', // À remplacer
-        userId: user.id,
-        authToken: 'user-auth-token', // À récupérer depuis le contexte d'auth
-      });
-      setSyncService(service);
+      console.log('🔥 Initialisation Firebase Sync Service pour:', user.email);
       
-      // Démarrer l'auto-sync par défaut
-      const stopAutoSync = service.startAutoSync(15); // Toutes les 15 minutes
-      setAutoSyncStopFunction(() => stopAutoSync);
+      const service = new FirebaseSyncService({
+        userId: user.id,
+      });
+      setFirebaseSyncService(service);
+      
+      // Activer l'auto-sync par défaut
+      enableAutoSync(true);
+      
     } else {
-      setSyncService(null);
-      if (autoSyncStopFunction) {
-        autoSyncStopFunction();
-        setAutoSyncStopFunction(null);
+      console.log('🔥 Nettoyage Firebase Sync Service');
+      
+      // Nettoyer les services
+      if (firebaseSyncService) {
+        firebaseSyncService.cleanup();
+        setFirebaseSyncService(null);
+      }
+      if (autoSyncInterval) {
+        clearInterval(autoSyncInterval);
+        setAutoSyncInterval(null);
       }
     }
+
+    return () => {
+      if (firebaseSyncService) {
+        firebaseSyncService.cleanup();
+      }
+    };
   }, [user, isAuthenticated]);
 
-  // Charger les données locales
+  // Charger les données locales au démarrage
   useEffect(() => {
     if (isAuthenticated && user) {
       setIsLoading(true);
+      console.log('📂 Chargement des données locales...');
       
       Promise.all([
         loadAll(user.id),
         loadProfile(user.id)
       ]).then(([userPhotos, userProfile]) => {
+        console.log(`📸 ${userPhotos.length} photos chargées`);
         setPhotos(userPhotos);
         setProfileState(userProfile);
         
-        // Calculer les statistiques de sync
         updateSyncStats(userPhotos, userProfile);
         setIsLoading(false);
+        
+        // Synchronisation initiale automatique
+        if (firebaseSyncService) {
+          setTimeout(() => {
+            syncNow().catch(error => 
+              console.log('⚠️ Sync initiale échouée:', error.message)
+            );
+          }, 1000);
+        }
+        
       }).catch((error) => {
-        console.error('Erreur lors du chargement des données:', error);
+        console.error('❌ Erreur chargement données:', error);
         setIsLoading(false);
       });
 
-      // Migration des anciennes données
+      // Migration des anciennes données si nécessaire
       migrateDataToUser(user.id).catch(console.error);
+      
     } else {
       setPhotos([]);
       setProfileState(createInitialProfile());
       setSyncState(prev => ({ ...prev, pendingCount: 0, conflictCount: 0 }));
       setIsLoading(false);
     }
-  }, [user, isAuthenticated]);
+  }, [user, isAuthenticated, firebaseSyncService]);
 
   // Sauvegarder automatiquement les changements
   useEffect(() => {
@@ -129,14 +155,14 @@ export default function JournalProvider({ children }: { children: React.ReactNod
       saveAll(user.id, photos);
       updateSyncStats(photos, profile);
     }
-  }, [photos, user, isAuthenticated]);
+  }, [photos, user, isAuthenticated, profile]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
       saveProfile(user.id, profile);
       updateSyncStats(photos, profile);
     }
-  }, [profile, user, isAuthenticated]);
+  }, [profile, user, isAuthenticated, photos]);
 
   // 🆕 Calculer les statistiques de sync
   const updateSyncStats = useCallback((currentPhotos: JournalPhoto[], currentProfile: ProfileState) => {
@@ -151,41 +177,41 @@ export default function JournalProvider({ children }: { children: React.ReactNod
     }));
   }, []);
 
-  // 🆕 Synchronisation manuelle
+  // 🆕 Synchronisation manuelle avec Firebase
   const syncNow = useCallback(async (): Promise<SyncResult> => {
-    if (!syncService || !isAuthenticated || !user) {
-      throw new Error('Service de synchronisation non disponible');
+    if (!firebaseSyncService || !isAuthenticated || !user) {
+      throw new Error('Service de synchronisation Firebase non disponible');
     }
 
-    setSyncState(prev => ({ ...prev, isSyncing: true, syncProgress: 'Démarrage...' }));
+    if (syncState.isSyncing) {
+      throw new Error('Synchronisation déjà en cours');
+    }
+
+    console.log('🔄 Début synchronisation Firebase...');
+    setSyncState(prev => ({ ...prev, isSyncing: true, syncProgress: 'Connexion...' }));
 
     try {
       // Vérifier la connexion
-      const networkStatus = await syncService.getNetworkStatus();
+      const networkStatus = await firebaseSyncService.getNetworkStatus();
       setSyncState(prev => ({ ...prev, isOnline: networkStatus.isConnected }));
       
       if (!networkStatus.isConnected) {
-        throw new Error('Pas de connexion internet');
+        throw new Error('Pas de connexion à Firebase');
       }
 
       // Synchroniser les photos
       setSyncState(prev => ({ ...prev, syncProgress: 'Synchronisation des photos...' }));
-      const photoResult = await syncService.syncPhotos(photos);
+      const photoResult = await firebaseSyncService.syncPhotos(photos);
       
       // Synchroniser le profil
       setSyncState(prev => ({ ...prev, syncProgress: 'Synchronisation du profil...' }));
-      const syncedProfile = await syncService.syncProfile(profile);
+      const syncedProfile = await firebaseSyncService.syncProfile(profile);
       setProfileState(syncedProfile);
 
       // Recharger les données après sync
       setSyncState(prev => ({ ...prev, syncProgress: 'Finalisation...' }));
       const updatedPhotos = await loadAll(user.id);
       setPhotos(updatedPhotos);
-
-      const result: SyncResult = {
-        ...photoResult,
-        duration: photoResult.duration,
-      };
 
       setSyncState(prev => ({
         ...prev,
@@ -194,12 +220,13 @@ export default function JournalProvider({ children }: { children: React.ReactNod
         syncProgress: 'Terminé',
       }));
 
-      // Mettre à jour les stats après sync
       updateSyncStats(updatedPhotos, syncedProfile);
+      console.log('✅ Synchronisation Firebase terminée:', photoResult);
 
-      return result;
+      return photoResult;
 
-    } catch (error) {
+    } catch (error: any) {
+      console.error('❌ Erreur synchronisation Firebase:', error);
       setSyncState(prev => ({
         ...prev,
         isSyncing: false,
@@ -207,20 +234,24 @@ export default function JournalProvider({ children }: { children: React.ReactNod
       }));
       throw error;
     }
-  }, [syncService, isAuthenticated, user, photos, profile, updateSyncStats]);
+  }, [firebaseSyncService, isAuthenticated, user, photos, profile, updateSyncStats, syncState.isSyncing]);
 
-  // Actions existantes modifiées pour le sync
+  // Actions modifiées pour Firebase
   const addPhoto = useCallback(async (photoData: Omit<JournalPhoto, 'id' | 'version' | 'lastModified' | 'syncStatus'>) => {
     if (!isAuthenticated || !user) return;
     
+    console.log('📸 Ajout nouvelle photo...');
+    
     // Copier l'image localement
     const localPath = await saveImageToLocal(photoData.uri);
-    if (!localPath) return;
+    if (!localPath) {
+      console.error('❌ Impossible de sauvegarder l\'image localement');
+      return;
+    }
 
     // Créer la photo avec les métadonnées de sync
     const newPhoto = createJournalPhoto(localPath, photoData.locationName);
     
-    // Ajouter les autres propriétés
     const completePhoto: JournalPhoto = {
       ...newPhoto,
       timestamp: photoData.timestamp,
@@ -229,41 +260,55 @@ export default function JournalProvider({ children }: { children: React.ReactNod
       note: photoData.note,
     };
 
-    // Marquer pour synchronisation si on a le service
+    // Marquer pour synchronisation Firebase
     let syncedPhoto = completePhoto;
-    if (syncService) {
-      syncedPhoto = await syncService.markPhotoForSync(completePhoto);
+    if (firebaseSyncService) {
+      syncedPhoto = await firebaseSyncService.markPhotoForSync(completePhoto);
     }
 
     setPhotos(prev => [syncedPhoto, ...prev]);
-  }, [isAuthenticated, user, syncService]);
-
-  const removePhoto = useCallback((id: string) => {
-    if (!isAuthenticated) return;
     
-    setPhotos(prev => {
-      const photo = prev.find(p => p.id === id);
-      if (photo && syncService) {
-        // Si la photo existe sur le serveur, marquer pour suppression
-        if (photo.serverId) {
-          // Marquer comme supprimée plutôt que de la retirer complètement
-          return prev.map(p => p.id === id ? { ...p, syncStatus: 'pending' as SyncStatus } : p);
-        }
-      }
-      // Sinon, supprimer localement
-      return prev.filter(p => p.id !== id);
-    });
-  }, [isAuthenticated, syncService]);
+    // Synchronisation automatique si activée
+    if (realtimeSyncEnabled && firebaseSyncService) {
+      setTimeout(() => {
+        syncNow().catch(error => 
+          console.log('⚠️ Auto-sync après ajout échouée:', error.message)
+        );
+      }, 500);
+    }
+  }, [isAuthenticated, user, firebaseSyncService, realtimeSyncEnabled, syncNow]);
 
-  const updatePhoto = useCallback((id: string, patch: Partial<JournalPhoto>) => {
+  const removePhoto = useCallback(async (id: string) => {
+    if (!isAuthenticated || !firebaseSyncService) return;
+    
+    const photo = photos.find(p => p.id === id);
+    if (!photo) return;
+
+    console.log('🗑️ Suppression photo:', id);
+    
+    try {
+      // Supprimer de Firebase si elle existe sur le serveur
+      if (photo.serverId || !photo.uri.startsWith('file://')) {
+        await firebaseSyncService.deletePhoto(id, photo.uri);
+      }
+    } catch (error) {
+      console.warn('⚠️ Erreur suppression Firebase:', error);
+    }
+    
+    // Supprimer localement
+    setPhotos(prev => prev.filter(p => p.id !== id));
+    
+  }, [isAuthenticated, firebaseSyncService, photos]);
+
+  const updatePhoto = useCallback(async (id: string, patch: Partial<JournalPhoto>) => {
     if (!isAuthenticated) return;
     
     setPhotos(prev => prev.map(photo => {
       if (photo.id === id) {
         const updatedPhoto = { ...photo, ...patch };
         
-        // Marquer pour sync si on modifie le contenu
-        if (syncService && (patch.title !== undefined || patch.note !== undefined)) {
+        // Marquer pour sync Firebase si on modifie le contenu
+        if (firebaseSyncService && (patch.title !== undefined || patch.note !== undefined)) {
           return {
             ...updatedPhoto,
             version: updatedPhoto.version + 1,
@@ -276,15 +321,24 @@ export default function JournalProvider({ children }: { children: React.ReactNod
       }
       return photo;
     }));
-  }, [isAuthenticated, syncService]);
 
-  const setProfile = useCallback((profileUpdates: Partial<ProfileState>) => {
-    if (!isAuthenticated || !syncService) return;
+    // Synchronisation automatique si activée
+    if (realtimeSyncEnabled && firebaseSyncService) {
+      setTimeout(() => {
+        syncNow().catch(error => 
+          console.log('⚠️ Auto-sync après modification échouée:', error.message)
+        );
+      }, 1000);
+    }
+  }, [isAuthenticated, firebaseSyncService, realtimeSyncEnabled, syncNow]);
+
+  const setProfile = useCallback(async (profileUpdates: Partial<ProfileState>) => {
+    if (!isAuthenticated || !firebaseSyncService) return;
     
     setProfileState(prev => {
       const updatedProfile = { ...prev, ...profileUpdates };
       
-      // Marquer pour sync
+      // Marquer pour sync Firebase
       return {
         ...updatedProfile,
         version: updatedProfile.version + 1,
@@ -292,46 +346,91 @@ export default function JournalProvider({ children }: { children: React.ReactNod
         syncStatus: 'pending' as SyncStatus,
       };
     });
-  }, [isAuthenticated, syncService]);
+
+    // Synchronisation automatique si activée
+    if (realtimeSyncEnabled) {
+      setTimeout(() => {
+        syncNow().catch(error => 
+          console.log('⚠️ Auto-sync profil échouée:', error.message)
+        );
+      }, 1000);
+    }
+  }, [isAuthenticated, firebaseSyncService, realtimeSyncEnabled, syncNow]);
 
   // 🆕 Gestion de l'auto-sync
   const enableAutoSync = useCallback((enabled: boolean) => {
-    if (!syncService) return;
+    if (!firebaseSyncService) return;
     
-    if (enabled && !autoSyncStopFunction) {
-      const stopFn = syncService.startAutoSync(15);
-      setAutoSyncStopFunction(() => stopFn);
-    } else if (!enabled && autoSyncStopFunction) {
-      autoSyncStopFunction();
-      setAutoSyncStopFunction(null);
+    console.log('🔄 Auto-sync:', enabled ? 'activé' : 'désactivé');
+    
+    if (enabled && !autoSyncInterval) {
+      const interval = setInterval(async () => {
+        if (!syncState.isSyncing) {
+          try {
+            await syncNow();
+          } catch (error) {
+            console.log('⚠️ Auto-sync échouée:', error.message);
+          }
+        }
+      }, 15 * 60 * 1000); // 15 minutes
+      
+      setAutoSyncInterval(interval);
+    } else if (!enabled && autoSyncInterval) {
+      clearInterval(autoSyncInterval);
+      setAutoSyncInterval(null);
     }
-  }, [syncService, autoSyncStopFunction]);
+  }, [firebaseSyncService, autoSyncInterval, syncState.isSyncing, syncNow]);
+
+  // 🆕 Gestion du sync temps réel
+  const enableRealTimeSync = useCallback((enabled: boolean) => {
+    console.log('⚡ Sync temps réel:', enabled ? 'activé' : 'désactivé');
+    setRealtimeSyncEnabled(enabled);
+    
+    if (enabled && firebaseSyncService) {
+      // Écouter les changements en temps réel
+      const unsubscribePhotos = firebaseSyncService.subscribeToPhotos((serverPhotos) => {
+        console.log('📡 Nouvelles photos reçues du serveur:', serverPhotos.length);
+        // Logique pour merger avec les données locales
+        // Cette partie nécessiterait une logique plus complexe pour éviter les boucles
+      });
+      
+      const unsubscribeProfile = firebaseSyncService.subscribeToProfile((serverProfile) => {
+        console.log('📡 Nouveau profil reçu du serveur');
+        // Merger avec le profil local si la version serveur est plus récente
+      });
+    }
+  }, [firebaseSyncService]);
 
   // 🆕 Résolution de conflit
   const resolveConflict = useCallback(async (photoId: string, resolution: 'keepLocal' | 'keepServer') => {
-    if (!syncService || !isAuthenticated) return;
+    if (!firebaseSyncService || !isAuthenticated) return;
     
     const photo = photos.find(p => p.id === photoId);
     if (!photo || photo.syncStatus !== 'conflict') return;
 
+    console.log('⚠️ Résolution conflit:', photoId, 'stratégie:', resolution);
+
     try {
       if (resolution === 'keepLocal') {
         // Forcer l'upload de la version locale
-        const resolvedPhoto = await syncService.markPhotoForSync(photo);
-        updatePhoto(photoId, resolvedPhoto);
+        const resolvedPhoto = await firebaseSyncService.markPhotoForSync(photo);
+        updatePhoto(photoId, { ...resolvedPhoto, syncStatus: 'pending' });
+        
+        // Synchroniser immédiatement
+        await syncNow();
       } else {
-        // Récupérer la version serveur
-        // Cette logique dépend de votre implémentation serveur
+        // Récupérer et appliquer la version serveur
         setSyncState(prev => ({ ...prev, syncProgress: 'Résolution du conflit...' }));
         
-        // Simuler la récupération de la version serveur
-        const serverPhoto = { ...photo, syncStatus: 'synced' as SyncStatus };
-        updatePhoto(photoId, serverPhoto);
+        // Re-synchroniser pour récupérer la version serveur
+        await syncNow();
       }
+      
+      console.log('✅ Conflit résolu');
     } catch (error) {
-      console.error('Erreur lors de la résolution du conflit:', error);
+      console.error('❌ Erreur résolution conflit:', error);
     }
-  }, [syncService, isAuthenticated, photos, updatePhoto]);
+  }, [firebaseSyncService, isAuthenticated, photos, updatePhoto, syncNow]);
 
   // 🆕 Helpers pour l'interface
   const getSyncIcon = useCallback((photo: JournalPhoto): string => {
@@ -358,13 +457,13 @@ export default function JournalProvider({ children }: { children: React.ReactNod
     }
   }, []);
 
-  // Vérifier périodiquement la connectivité
+  // Vérifier périodiquement la connectivité Firebase
   useEffect(() => {
-    if (!syncService) return;
+    if (!firebaseSyncService) return;
 
     const checkConnectivity = async () => {
       try {
-        const networkStatus = await syncService.getNetworkStatus();
+        const networkStatus = await firebaseSyncService.getNetworkStatus();
         setSyncState(prev => ({ ...prev, isOnline: networkStatus.isConnected }));
       } catch {
         setSyncState(prev => ({ ...prev, isOnline: false }));
@@ -376,16 +475,16 @@ export default function JournalProvider({ children }: { children: React.ReactNod
     const interval = setInterval(checkConnectivity, 30000);
 
     return () => clearInterval(interval);
-  }, [syncService]);
+  }, [firebaseSyncService]);
 
   // Nettoyage à la déconnexion
   useEffect(() => {
     return () => {
-      if (autoSyncStopFunction) {
-        autoSyncStopFunction();
+      if (autoSyncInterval) {
+        clearInterval(autoSyncInterval);
       }
     };
-  }, [autoSyncStopFunction]);
+  }, [autoSyncInterval]);
 
   const contextValue: JournalContextType = {
     // État existant
@@ -399,10 +498,11 @@ export default function JournalProvider({ children }: { children: React.ReactNod
     updatePhoto,
     setProfile,
     
-    // 🆕 Fonctionnalités de sync
+    // 🆕 Fonctionnalités de sync Firebase
     syncState,
     syncNow,
     enableAutoSync,
+    enableRealTimeSync: enableRealTimeSync,
     resolveConflict,
     getSyncIcon,
     getSyncStatusText,
