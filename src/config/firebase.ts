@@ -30,7 +30,10 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 
 // Connect to emulator in development (optionnel)
-if (__DEV__ && !db._delegate._databaseId.projectId.includes('localhost')) {
-  // Décommentez si vous utilisez l'émulateur Firebase
-  // connectFirestoreEmulator(db, 'localhost', 8080);
+if (__DEV__ && process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATOR === "true") {
+  connectFirestoreEmulator(db, "localhost", 8080);
+  // Tu peux aussi ajouter connectAuthEmulator(auth, "http://localhost:9099");
 }
+
+
+export const firebase = { app, auth, db, storage };

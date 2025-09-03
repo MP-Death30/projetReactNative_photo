@@ -28,6 +28,7 @@ export function SyncSettingsModal({ visible, onClose }: SyncSettingsModalProps) 
   };
 
   const handleForceSyncPress = async () => {
+    console.log('Bouton sync pressé');
     try {
       await syncNow();
     } catch (error) {

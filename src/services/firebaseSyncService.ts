@@ -1,30 +1,13 @@
 // src/services/firebaseSyncService.ts
-import {
-  doc,
-  collection,
-  getDocs,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  limit,
-  serverTimestamp,
-  onSnapshot,
-  writeBatch,
-  getDoc,
-  Timestamp
-} from 'firebase/firestore';
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject
-} from 'firebase/storage';
-import * as FileSystem from 'expo-file-system';
-import { db, storage } from '../config/firebase';
-import { JournalPhoto, ProfileState, SyncResult, SyncStatus, NetworkStatus } from '../types';
+import { 
+  doc, getDoc, setDoc, collection, getDocs, query, where, orderBy, serverTimestamp 
+} from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import * as FileSystem from "expo-file-system";
+import { db, storage, auth } from "../config/firebase";
+import type { JournalPhoto, ProfileState, SyncResult } from "../types";
+import * as localStorage from "../storage";
+import NetInfo from "@react-native-community/netinfo";
 
 interface FirebaseSyncConfig {
   userId: string;
@@ -32,382 +15,226 @@ interface FirebaseSyncConfig {
 
 export class FirebaseSyncService {
   private config: FirebaseSyncConfig;
-  private listeners: Map<string, () => void> = new Map();
 
   constructor(config: FirebaseSyncConfig) {
     this.config = config;
   }
 
-  // 🌐 Vérification de la connectivité
-  async getNetworkStatus(): Promise<NetworkStatus> {
-    try {
-      // Test simple de connectivité Firebase
-      const testDoc = doc(db, 'connectivity', 'test');
-      await getDoc(testDoc);
-      return {
-        isConnected: true,
-        connectionType: 'unknown'
-      };
-    } catch (error) {
-      return {
-        isConnected: false,
-        connectionType: 'unknown'
-      };
+  /** Vérifier si l’utilisateur est connecté */
+  private checkAuth() {
+    if (!auth.currentUser || auth.currentUser.uid !== this.config.userId) {
+      throw new Error("Utilisateur non authentifié");
     }
   }
 
-  // 📸 Synchronisation des photos
-  async syncPhotos(localPhotos: JournalPhoto[]): Promise<SyncResult> {
+  /** Vérifier la connexion réseau */
+  async getNetworkStatus(): Promise<{ isConnected: boolean }> {
+    try {
+      const state = await NetInfo.fetch();
+      return { isConnected: !!state.isConnected };
+    } catch {
+      return { isConnected: false };
+    }
+  }
+
+  /** Synchroniser les photos */
+  async syncPhotos(): Promise<SyncResult> {
+    this.checkAuth();
+
+    const localPhotos = await localStorage.loadAll(this.config.userId);
+
     const result: SyncResult = {
       uploaded: 0,
       downloaded: 0,
       conflicts: 0,
       errors: [],
-      duration: 0
+      duration: 0,
     };
 
-    const startTime = Date.now();
+    const start = Date.now();
 
     try {
-      // 1. Upload des photos en attente
-      const uploadResult = await this.uploadPendingPhotos(localPhotos);
-      result.uploaded = uploadResult.count;
-      result.errors.push(...uploadResult.errors);
-
-      // 2. Download des nouvelles photos
-      const downloadResult = await this.downloadNewPhotos(localPhotos);
-      result.downloaded = downloadResult.count;
-      result.errors.push(...downloadResult.errors);
-
-      // 3. Résolution des conflits
-      const conflictResult = await this.resolveConflicts(localPhotos);
-      result.conflicts = conflictResult.count;
-      result.errors.push(...conflictResult.errors);
-
-      result.duration = Date.now() - startTime;
-      return result;
-    } catch (error) {
-      result.errors.push(`Erreur générale: ${error.message}`);
-      result.duration = Date.now() - startTime;
-      throw error;
-    }
-  }
-
-  // ⬆️ Upload des photos en attente
-  private async uploadPendingPhotos(localPhotos: JournalPhoto[]): Promise<{ count: number; errors: string[] }> {
-    const pendingPhotos = localPhotos.filter(photo => 
-      photo.syncStatus === 'pending' || photo.syncStatus === 'error'
-    );
-    
-    const errors: string[] = [];
-    let count = 0;
-    const batch = writeBatch(db);
-
-    for (const photo of pendingPhotos) {
-      try {
-        let imageUrl = photo.uri;
-        
-        // Upload de l'image si nécessaire
-        if (photo.needsUpload && photo.uri.startsWith('file://')) {
-          imageUrl = await this.uploadImageToStorage(photo.uri, photo.id);
-        }
-
-        // Préparer les données pour Firestore
-        const photoData = {
-          localId: photo.id,
-          uri: imageUrl,
-          timestamp: photo.timestamp,
-          dateISO: photo.dateISO,
-          locationName: photo.locationName || null,
-          title: photo.title || '',
-          note: photo.note || '',
-          version: photo.version,
-          lastModified: photo.lastModified,
-          userId: this.config.userId,
-          syncStatus: 'synced',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        };
-
-        // Utiliser l'ID local comme ID Firestore
-        const docRef = doc(db, 'photos', photo.id);
-        batch.set(docRef, photoData);
-        count++;
-
-      } catch (error) {
-        errors.push(`Erreur upload photo ${photo.id}: ${error.message}`);
-      }
-    }
-
-    // Exécuter le batch
-    if (count > 0) {
-      await batch.commit();
-    }
-
-    return { count, errors };
-  }
-
-  // ⬇️ Download des nouvelles photos
-  private async downloadNewPhotos(localPhotos: JournalPhoto[]): Promise<{ count: number; errors: string[] }> {
-    const errors: string[] = [];
-    let count = 0;
-
-    try {
-      // Récupérer les photos du serveur pour cet utilisateur
-      const photosQuery = query(
-        collection(db, 'photos'),
-        where('userId', '==', this.config.userId),
-        orderBy('createdAt', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(photosQuery);
-      const localPhotoIds = new Set(localPhotos.map(p => p.id));
-
-      for (const docSnapshot of querySnapshot.docs) {
-        const serverPhoto = { id: docSnapshot.id, ...docSnapshot.data() };
-        
-        if (!localPhotoIds.has(serverPhoto.id)) {
-          // Nouvelle photo du serveur
+      // --- Upload local → cloud
+      for (const photo of localPhotos) {
+        if (photo.syncStatus === "pending" || photo.syncStatus === "error") {
           try {
-            await this.downloadPhotoFromServer(serverPhoto);
-            count++;
-          } catch (error) {
-            errors.push(`Erreur download photo ${serverPhoto.id}: ${error.message}`);
-          }
-        } else {
-          // Vérifier les conflits
-          const localPhoto = localPhotos.find(p => p.id === serverPhoto.id);
-          if (localPhoto && this.hasConflict(localPhoto, serverPhoto)) {
-            // Marquer comme conflit - sera géré par resolveConflicts
-            await this.markAsConflict(localPhoto.id);
-          }
-        }
-      }
+            let downloadUrl = photo.uri;
+            let storagePath = photo.storagePath;
 
-    } catch (error) {
-      errors.push(`Erreur générale download: ${error.message}`);
-    }
+            if (photo.uri.startsWith("file://")) {
+              const uploadResult = await this.uploadImage(photo.uri, photo.id);
+              downloadUrl = uploadResult.downloadUrl;
+              storagePath = uploadResult.storagePath;
+            }
 
-    return { count, errors };
-  }
-
-  // 🔄 Résolution des conflits
-  private async resolveConflicts(localPhotos: JournalPhoto[]): Promise<{ count: number; errors: string[] }> {
-    const conflictPhotos = localPhotos.filter(photo => photo.syncStatus === 'conflict');
-    const errors: string[] = [];
-    let count = 0;
-
-    for (const conflictPhoto of conflictPhotos) {
-      try {
-        // Stratégie: la dernière modification gagne
-        const serverDocRef = doc(db, 'photos', conflictPhoto.id);
-        const serverDoc = await getDoc(serverDocRef);
-        
-        if (serverDoc.exists()) {
-          const serverData = serverDoc.data();
-          
-          if (conflictPhoto.lastModified > serverData.lastModified) {
-            // Version locale plus récente
-            await updateDoc(serverDocRef, {
-              title: conflictPhoto.title,
-              note: conflictPhoto.note,
-              version: conflictPhoto.version,
-              lastModified: conflictPhoto.lastModified,
-              updatedAt: serverTimestamp()
+            await setDoc(doc(db, "photos", photo.id), {
+              ...photo,
+              uri: downloadUrl,
+              storagePath,
+              userId: this.config.userId,
+              syncStatus: "synced",
+              updatedAt: serverTimestamp(),
+              lastModified: photo.lastModified,
+              version: (photo.version ?? 0) + 1,
             });
+
+            result.uploaded++;
+          } catch (err: any) {
+            result.errors.push(`Erreur upload ${photo.id}: ${err.message}`);
           }
-          // Sinon, la version serveur est plus récente et sera récupérée
         }
-        
-        count++;
-      } catch (error) {
-        errors.push(`Erreur résolution conflit ${conflictPhoto.id}: ${error.message}`);
       }
-    }
 
-    return { count, errors };
-  }
+      // --- Download cloud → local
+      const photosQuery = query(
+        collection(db, "photos"),
+        where("userId", "==", this.config.userId),
+        orderBy("updatedAt", "desc")
+      );
+      const snapshot = await getDocs(photosQuery);
 
-  // 👤 Synchronisation du profil
-  async syncProfile(localProfile: ProfileState): Promise<ProfileState> {
-    try {
-      const profileRef = doc(db, 'profiles', this.config.userId);
-      
-      if (localProfile.syncStatus === 'pending' || localProfile.syncStatus === 'error') {
-        // Upload du profil
-        const profileData = {
-          name: localProfile.name,
-          avatarUri: localProfile.avatarUri || null,
-          version: localProfile.version,
-          lastModified: localProfile.lastModified,
-          userId: this.config.userId,
-          updatedAt: serverTimestamp()
-        };
-        
-        await setDoc(profileRef, profileData, { merge: true });
-        
-        return {
-          ...localProfile,
-          syncStatus: 'synced'
-        };
-      } else {
-        // Vérifier les mises à jour serveur
-        const serverDoc = await getDoc(profileRef);
-        if (serverDoc.exists()) {
-          const serverData = serverDoc.data();
-          if (serverData.version > localProfile.version) {
-            return {
-              name: serverData.name,
-              avatarUri: serverData.avatarUri,
-              version: serverData.version,
-              lastModified: serverData.lastModified,
-              syncStatus: 'synced'
+      for (const docSnap of snapshot.docs) {
+        const serverPhoto = { id: docSnap.id, ...docSnap.data() } as any;
+        const localPhoto = localPhotos.find((p) => p.id === serverPhoto.id);
+
+        if (!localPhoto) {
+          const localUri = await this.downloadImage(serverPhoto.uri, serverPhoto.id);
+          const newPhoto: JournalPhoto = {
+            ...serverPhoto,
+            uri: localUri,
+            syncStatus: "synced",
+          };
+          await localStorage.addPhoto(this.config.userId, newPhoto);
+          result.downloaded++;
+        } else {
+          // Conflits
+          if (localPhoto.lastModified > serverPhoto.lastModified) {
+            try {
+              let downloadUrl = localPhoto.uri;
+              let storagePath = localPhoto.storagePath;
+
+              if (localPhoto.uri.startsWith("file://")) {
+                const uploadResult = await this.uploadImage(localPhoto.uri, localPhoto.id);
+                downloadUrl = uploadResult.downloadUrl;
+                storagePath = uploadResult.storagePath;
+              }
+
+              await setDoc(doc(db, "photos", localPhoto.id), {
+                ...localPhoto,
+                uri: downloadUrl,
+                storagePath,
+                userId: this.config.userId,
+                syncStatus: "synced",
+                updatedAt: serverTimestamp(),
+                lastModified: localPhoto.lastModified,
+                version: (localPhoto.version ?? 0) + 1,
+              });
+
+              result.conflicts++;
+            } catch (err: any) {
+              result.errors.push(`Erreur résolution conflit ${localPhoto.id}: ${err.message}`);
+            }
+          } else if (serverPhoto.lastModified > localPhoto.lastModified) {
+            const localUri = await this.downloadImage(serverPhoto.uri, serverPhoto.id);
+            const updatedPhoto: JournalPhoto = {
+              ...serverPhoto,
+              uri: localUri,
+              syncStatus: "synced",
             };
+            await this.replaceLocalPhoto(updatedPhoto);
+            result.downloaded++;
           }
         }
       }
-      
+
+      result.duration = Date.now() - start;
+      return result;
+    } catch (err: any) {
+      result.errors.push(`Erreur générale: ${err.message}`);
+      result.duration = Date.now() - start;
+      return result;
+    }
+  }
+
+  /** Synchroniser le profil local ↔ cloud */
+  async syncProfile(): Promise<ProfileState> {
+    this.checkAuth();
+
+    const localProfile = await localStorage.loadProfile(this.config.userId);
+
+    try {
+      const profileRef = doc(db, "profiles", this.config.userId);
+      const snap = await getDoc(profileRef);
+
+      if (!snap.exists() || localProfile.lastModified > (snap.data()?.lastModified ?? 0)) {
+        // Upload local
+        const newProfile = {
+          ...localProfile,
+          userId: this.config.userId,
+          lastModified: Date.now(),
+          version: (localProfile.version ?? 0) + 1,
+          updatedAt: serverTimestamp(),
+        };
+        await setDoc(profileRef, newProfile);
+        await localStorage.saveProfile(this.config.userId, { ...newProfile, syncStatus: "synced" });
+        return { ...newProfile, syncStatus: "synced" };
+      }
+
+      // Cloud plus récent
+      const serverProfile = snap.data() as ProfileState;
+      if (serverProfile.version > (localProfile.version ?? 0)) {
+        await localStorage.saveProfile(this.config.userId, { ...serverProfile, syncStatus: "synced" });
+        return { ...serverProfile, syncStatus: "synced" };
+      }
+
       return localProfile;
-    } catch (error) {
-      console.error('Erreur sync profil:', error);
-      return {
-        ...localProfile,
-        syncStatus: 'error'
-      };
+    } catch (err: any) {
+      console.error("Erreur sync profil:", err);
+      return { ...localProfile, syncStatus: "error" };
     }
   }
 
-  // 🖼️ Upload d'image vers Firebase Storage
-  private async uploadImageToStorage(localUri: string, photoId: string): Promise<string> {
-    try {
-      // Lire le fichier local
-      const response = await fetch(localUri);
-      const blob = await response.blob();
-      
-      // Créer une référence unique
-      const imageRef = ref(storage, `photos/${this.config.userId}/${photoId}.jpg`);
-      
-      // Upload
-      await uploadBytes(imageRef, blob);
-      
-      // Récupérer l'URL de download
-      const downloadUrl = await getDownloadURL(imageRef);
-      return downloadUrl;
-      
-    } catch (error) {
-      throw new Error(`Erreur upload image: ${error.message}`);
-    }
+  /** Upload image dans Firebase Storage */
+  private async uploadImage(localUri: string, photoId: string) {
+    const response = await fetch(localUri);
+    const blob = await response.blob();
+    const storagePath = `photos/${this.config.userId}/${photoId}.jpg`;
+    const imageRef = ref(storage, storagePath);
+
+    await uploadBytes(imageRef, blob);
+    const downloadUrl = await getDownloadURL(imageRef);
+
+    return { downloadUrl, storagePath };
   }
 
-  // ⬇️ Download d'image depuis Firebase Storage
-  private async downloadImageFromStorage(storageUrl: string, localId: string): Promise<string> {
-    try {
-      const fileName = `photo_${localId}_${Date.now()}.jpg`;
-      const localUri = `${FileSystem.documentDirectory}${fileName}`;
-      
-      await FileSystem.downloadAsync(storageUrl, localUri);
-      return localUri;
-      
-    } catch (error) {
-      throw new Error(`Erreur download image: ${error.message}`);
-    }
+  /** Télécharger une image depuis Firebase Storage */
+  private async downloadImage(storageUrl: string, photoId: string): Promise<string> {
+    const fileName = `photo_${photoId}_${Date.now()}.jpg`;
+    const localPath = `${FileSystem.documentDirectory}${fileName}`;
+    await FileSystem.downloadAsync(storageUrl, localPath);
+    return localPath;
   }
 
-  // 📥 Download complet d'une photo depuis le serveur
-  private async downloadPhotoFromServer(serverPhoto: any): Promise<void> {
-    // Cette méthode sera appelée par le contexte pour ajouter la photo
-    // On émet un événement ou on utilise un callback
-    console.log('Nouvelle photo à télécharger:', serverPhoto);
+  /** Remplacer une photo en local */
+  private async replaceLocalPhoto(photo: JournalPhoto) {
+    const photos = await localStorage.loadAll(this.config.userId);
+    const updated = photos.map((p) => (p.id === photo.id ? photo : p));
+    await localStorage.saveAll(this.config.userId, updated);
   }
 
-  // 🔍 Détection de conflit
-  private hasConflict(localPhoto: JournalPhoto, serverPhoto: any): boolean {
-    return localPhoto.syncStatus === 'pending' && 
-           serverPhoto.lastModified > localPhoto.lastModified;
-  }
-
-  // ⚠️ Marquer comme conflit
-  private async markAsConflict(photoId: string): Promise<void> {
-    // Cette logique sera gérée par le contexte
-    console.log('Conflit détecté pour:', photoId);
-  }
-
-  // 🗑️ Supprimer une photo
-  async deletePhoto(photoId: string, storageUrl?: string): Promise<void> {
-    const batch = writeBatch(db);
-    
-    // Supprimer de Firestore
-    const photoRef = doc(db, 'photos', photoId);
-    batch.delete(photoRef);
-    
-    await batch.commit();
-    
-    // Supprimer de Storage si nécessaire
-    if (storageUrl) {
+  /** Supprimer une photo */
+  async deletePhoto(photoId: string, storagePath?: string): Promise<void> {
+    this.checkAuth();
+    await deleteDoc(doc(db, "photos", photoId));
+    if (storagePath) {
       try {
-        const imageRef = ref(storage, storageUrl);
-        await deleteObject(imageRef);
-      } catch (error) {
-        console.warn('Impossible de supprimer l\'image du storage:', error);
+        await deleteObject(ref(storage, storagePath));
+      } catch (e) {
+        console.warn("Suppression storage échouée:", e);
       }
     }
-  }
-
-  // 👂 Écouter les changements en temps réel
-  subscribeToPhotos(callback: (photos: any[]) => void): () => void {
-    const photosQuery = query(
-      collection(db, 'photos'),
-      where('userId', '==', this.config.userId),
-      orderBy('createdAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(photosQuery, (snapshot) => {
-      const photos = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      callback(photos);
-    });
-
-    this.listeners.set('photos', unsubscribe);
-    return unsubscribe;
-  }
-
-  subscribeToProfile(callback: (profile: any) => void): () => void {
-    const profileRef = doc(db, 'profiles', this.config.userId);
-
-    const unsubscribe = onSnapshot(profileRef, (doc) => {
-      if (doc.exists()) {
-        callback(doc.data());
-      }
-    });
-
-    this.listeners.set('profile', unsubscribe);
-    return unsubscribe;
-  }
-
-  // 🧹 Nettoyage
-  cleanup(): void {
-    this.listeners.forEach(unsubscribe => unsubscribe());
-    this.listeners.clear();
-  }
-
-  // 🔧 Utilitaires
-  async markPhotoForSync(photo: JournalPhoto): Promise<JournalPhoto> {
-    return {
-      ...photo,
-      version: photo.version + 1,
-      lastModified: Date.now(),
-      syncStatus: 'pending'
-    };
-  }
-
-  async markProfileForSync(profile: ProfileState): Promise<ProfileState> {
-    return {
-      ...profile,
-      version: profile.version + 1,
-      lastModified: Date.now(),
-      syncStatus: 'pending'
-    };
+    const localPhotos = await localStorage.loadAll(this.config.userId);
+    const updated = localPhotos.filter((p) => p.id !== photoId);
+    await localStorage.saveAll(this.config.userId, updated);
   }
 }

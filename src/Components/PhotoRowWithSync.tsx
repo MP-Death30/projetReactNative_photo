@@ -1,9 +1,9 @@
 // src/Components/PhotoRowWithSync.tsx
-import React from 'react';
-import { View, Image, Text, Pressable, StyleSheet } from 'react-native';
-import type { JournalPhoto } from '../types';
-import { useJournal } from '../context/JournalProvider';
-import { colors, spacing, borderRadius } from '../styles/globalStyles';
+import React from "react";
+import { View, Image, Text, Pressable, StyleSheet } from "react-native";
+import type { JournalPhoto } from "../types";
+import { useJournal } from "../context/JournalProvider";
+import { colors, spacing, borderRadius } from "../styles/globalStyles";
 
 interface PhotoRowWithSyncProps {
   photo: JournalPhoto;
@@ -12,52 +12,65 @@ interface PhotoRowWithSyncProps {
 }
 
 export function PhotoRowWithSync({ photo, onPress, onResolveConflict }: PhotoRowWithSyncProps) {
-  const { getSyncIcon, getSyncStatusText, resolveConflict } = useJournal();
+  const { getSyncIcon, getSyncStatusText, resolveConflict, retryUpload } = useJournal();
 
-  const handleConflictResolve = () => {
-    if (onResolveConflict) {
-      onResolveConflict();
-    }
+  const handleConflictResolve = (choice: "keepLocal" | "keepServer") => {
+    resolveConflict(photo.id, choice);
+    if (onResolveConflict) onResolveConflict();
   };
 
   return (
     <Pressable onPress={onPress} style={styles.container}>
+      {/* 👉 Image locale affichée en priorité */}
       <Image source={{ uri: photo.uri }} style={styles.thumbnail} />
-      
+
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>{photo.title || 'Sans titre'}</Text>
+          <Text style={styles.title}>{photo.title || "Sans titre"}</Text>
           <View style={styles.syncIndicator}>
             <Text style={styles.syncIcon}>{getSyncIcon(photo)}</Text>
           </View>
         </View>
-        
+
         <Text style={styles.subtitle}>
           {new Date(photo.timestamp).toLocaleString()}
-          {photo.locationName ? ` — ${photo.locationName}` : ''}
+          {photo.locationName ? ` — ${photo.locationName}` : ""}
         </Text>
-        
-        <Text style={[styles.syncStatus, { 
-          color: photo.syncStatus === 'conflict' ? colors.danger : colors.gray 
-        }]}>
+
+        <Text
+          style={[
+            styles.syncStatus,
+            { color: photo.syncStatus === "conflict" ? colors.danger : colors.gray },
+          ]}
+        >
           {getSyncStatusText(photo.syncStatus)}
         </Text>
-        
-        {photo.syncStatus === 'conflict' && (
+
+        {/* 👉 Gestion des états */}
+        {photo.syncStatus === "conflict" && (
           <View style={styles.conflictActions}>
-            <Pressable 
+            <Pressable
               style={[styles.conflictButton, { backgroundColor: colors.primary }]}
-              onPress={() => resolveConflict(photo.id, 'keepLocal')}
+              onPress={() => handleConflictResolve("keepLocal")}
             >
               <Text style={styles.conflictButtonText}>Garder local</Text>
             </Pressable>
-            <Pressable 
+            <Pressable
               style={[styles.conflictButton, { backgroundColor: colors.success }]}
-              onPress={() => resolveConflict(photo.id, 'keepServer')}
+              onPress={() => handleConflictResolve("keepServer")}
             >
               <Text style={styles.conflictButtonText}>Garder serveur</Text>
             </Pressable>
           </View>
+        )}
+
+        {photo.syncStatus === "error" && (
+          <Pressable
+            style={[styles.conflictButton, { backgroundColor: colors.warning, marginTop: spacing.s }]}
+            onPress={() => retryUpload(photo)}
+          >
+            <Text style={styles.conflictButtonText}>Réessayer</Text>
+          </Pressable>
         )}
       </View>
     </Pressable>
@@ -66,7 +79,7 @@ export function PhotoRowWithSync({ photo, onPress, onResolveConflict }: PhotoRow
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
+    flexDirection: "row",
     padding: spacing.m,
     backgroundColor: colors.white,
     marginBottom: 1,
@@ -80,16 +93,16 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     marginLeft: spacing.m,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
   title: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
     color: colors.dark,
     flex: 1,
   },
@@ -107,10 +120,10 @@ const styles = StyleSheet.create({
   syncStatus: {
     fontSize: 12,
     marginTop: 2,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   conflictActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginTop: spacing.s,
     gap: spacing.s,
   },
@@ -122,6 +135,6 @@ const styles = StyleSheet.create({
   conflictButtonText: {
     color: colors.white,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });
