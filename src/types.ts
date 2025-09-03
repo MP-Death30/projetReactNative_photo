@@ -40,3 +40,4 @@ export interface RegisterCredentials {
   password: string;
   name: string;
 }
+

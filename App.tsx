@@ -3,6 +3,10 @@ import { Text, View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
+import { useEffect } from 'react';
+import { Platform } from 'react-native';
+import { createStackNavigator } from '@react-navigation/stack';
 
 import AuthProvider, { useAuth } from './src/context/AuthProvider';
 import JournalProvider from './src/context/JournalProvider';
@@ -12,6 +16,10 @@ import CalendarScreen from './src/screens/CalendarScreen';
 import PhotosScreen from './src/screens/PhotosScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import MapScreen from './src/screens/MapScreen';
+import { TodoProvider } from './src/context/TodoProvider';
+import TodoFormScreen from './src/screens/TodoFormScreen';
+import { ensurePermissionsAndChannel, scheduleTodoNotification } from './src/utils/notifications';
+
 
 const Tab = createBottomTabNavigator();
 
@@ -121,15 +129,25 @@ function MainApp() {
   );
 }
 
+const Stack = createStackNavigator();
+
 export default function App() {
+  useEffect(() => {
+    ensurePermissionsAndChannel().catch(console.warn);
+  }, []);
+  
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <MainApp />
+        <TodoProvider>
+          <MainApp />
+        </TodoProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
 }
+
+
 
 const styles = StyleSheet.create({
   safeArea: {
