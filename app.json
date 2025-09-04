@@ -7,6 +7,16 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff",
+          "sounds": []
+        }
+      ]
+    ],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -16,11 +26,16 @@
       "supportsTablet": true
     },
     "android": {
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.anonymous.snack5d2a8bc8565b45c29b7d08509bd5bf84"
     },
     "web": {
       "favicon": "./assets/favicon.png"
