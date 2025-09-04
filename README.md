@@ -151,6 +151,10 @@ Visualisation interactive des emplacements de prise de vue avec aperçu des phot
 - **Location Service** : Géolocalisation et cartographie
 - **Notification Service** : Système de rappels
 
+Pour avoir une vision plus claire, voici un schéma :
+
+<div align="center"><img src="./screenshots/11_schema_architecture.png" width="1000" alt="Schema architecture"></div>
+
 ## 👥 Répartition des Tâches
 
 ### 👨‍💼 **Mathis** - *Responsable Projet & Production*
