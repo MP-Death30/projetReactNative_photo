@@ -19,10 +19,9 @@ projetReactNative_photo est une application mobile développée avec React Nativ
 - **💾 Stockage Local Persistant** : Sauvegarde automatique des données
 - **🔐 Système d'Authentification** : Inscription et connexion sécurisées
 - **📝 TodoList Intégrée** : Gestion de tâches avec le calendrier
+- **🔔 Système de Notifications** : Notifie l'utilisateur 5 minutes avant l'horaire d'une tâche 
 
 ##### ⚠️ En Développement
-- **🔔 Système de Notifications** : Fonctionnel mais avec des améliorations à apporter
-  - ⚠️ Problème identifié : Les rappels se déclenchent immédiatement lors de l'enregistrement au lieu de 5 minutes avant l'heure programmée
 - **☁️ Synchronisation Cloud** : En cours de développement (branche MPO)
   - ⚠️ Problème de communication avec Firebase en cours de résolution
 
@@ -61,7 +60,10 @@ projetReactNative_photo est une application mobile développée avec React Nativ
 
 Au premier lancement, vous arriverez sur la page d'authentification :
 
-*[Insérer screenshot de la page de connexion]*
+<div align="center">
+  <img src="./screenshots/01_pageAuth_1.jpg" width="250" alt="Page Auth 1">
+  <img src="./screenshots/02_pageAuth_2.jpg" width="250" alt="Page Auth 2">
+</div>
 
 #### Créer un Compte
 1. Cliquez sur "Pas encore de compte ? Créer un compte"
@@ -80,33 +82,42 @@ Si vous avez déjà un compte, saisissez simplement votre email et mot de passe.
 #### 📷 Page Caméra
 Interface de capture photo avec bouton de déclenchement central.
 
-*[Insérer screenshot de la page caméra]*
+<div align="center"><img src="./screenshots/03_pageCamera.jpg" width="250" alt="Page Camera"></div>
 
 #### 🗺️ Page Carte
 Visualisation interactive des emplacements de prise de vue avec aperçu des photos.
 
-*[Insérer screenshot de la page carte]*
+<div align="center"><img src="./screenshots/04_pageCarte.jpg" width="250" alt="Page Carte"></div>
 
 #### 📅 Page Calendrier
 - Vue calendaire des photos par date
 - Interface de création et gestion de tâches
 - Système de rappels intégré
 
-*[Insérer screenshot de la page calendrier]*
+<div align="center">
+  <img src="./screenshots/05_pageCalendrier_ToDoList.jpg" width="250" alt="Page Calendrier ToDo List">
+  <img src="./screenshots/06_pageCalendrier_Photo.jpg" width="250" alt="Page Calendrier Photo">
+</div>
 
 #### 🖼️ Page Photos
 - Galerie complète de vos photos
 - Édition des titres et descriptions
 - Fonction de suppression
 
-*[Insérer screenshot de la page photos]*
+<div align="center">
+  <img src="./screenshots/07_pagePhotos.jpg" width="250" alt="Page Photos">
+  <img src="./screenshots/08_pagePhotos_edition.jpg" width="250" alt="Page Photos Edition">
+</div>
 
 #### 👤 Page Profil
 - Informations personnelles
 - Statistiques d'utilisation
 - Modification de la photo de profil et du nom
 
-*[Insérer screenshot de la page profil]*
+<div align="center">
+  <img src="./screenshots/09_pageProfil_haut.jpg" width="250" alt="Page Profil Haut">
+  <img src="./screenshots/10_pageProfil_bas.jpg" width="250" alt="Page Profil Bas">
+</div>
 
 ## 🏗️ Architecture Technique
 
@@ -176,11 +187,9 @@ Visualisation interactive des emplacements de prise de vue avec aperçu des phot
 ## 🐛 Problèmes Connus et Améliorations
 
 ### Issues en Cours
-1. **Système de Notifications** : Les rappels se déclenchent immédiatement au lieu de respecter le délai programmé
-2. **Synchronisation Cloud** : Erreur de communication avec Firebase (branche MPO)
+1. **Synchronisation Cloud** : Erreur de communication avec Firebase (branche MPO)
 
 ### Prochaines Améliorations
-- Correction du système de notifications
 - Finalisation de la synchronisation cloud
 - Optimisation des performances
 - Tests utilisateur et corrections UX
