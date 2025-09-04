@@ -3,6 +3,7 @@ import React, {
   useMemo,
   useState,
   useCallback,
+  useRef,
 } from "react";
 import {
   View,
@@ -13,11 +14,13 @@ import {
   Image,
   TouchableOpacity,
   FlatList,
+  Dimensions,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import * as Location from "expo-location";
 import { useJournal } from "../context/JournalProvider";
-import { Dimensions } from "react-native"; 
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 
 const { width, height } = Dimensions.get("window");
 
@@ -25,6 +28,7 @@ type CityCoord = { latitude: number; longitude: number };
 
 export default function MapScreen() {
   const { photos } = useJournal();
+  const webViewRef = useRef<any>(null);
 
   // Group photos by city
   const cities = useMemo(() => {
@@ -88,57 +92,106 @@ export default function MapScreen() {
     };
   }, [cities, coords]);
 
-  // Generate JS for markers (popup sends city name encoded)
-  const markersJS = cities
-    .map(([city, data]) => {
-      const c = coords[city];
-      if (!c) return "";
-      return `
-        L.marker([${c.latitude}, ${c.longitude}]).addTo(map)
-          .bindPopup("<b>${city}</b><br>${data.count} photo${
-        data.count > 1 ? "s" : ""
-      }<br><button onclick=\\"window.ReactNativeWebView.postMessage('${encodeURIComponent(
-        city
-      )}')\\">Voir photos</button>");
-      `;
-    })
-    .join("\n");
+  // Compute average center
+  const center = useMemo(() => {
+    const coordsArray = Object.values(coords);
+    if (coordsArray.length === 0) return { latitude: 48.8566, longitude: 2.3522 };
+    const lat = coordsArray.reduce((s, c) => s + c.latitude, 0) / coordsArray.length;
+    const lng = coordsArray.reduce((s, c) => s + c.longitude, 0) / coordsArray.length;
+    return { latitude: lat, longitude: lng };
+  }, [coords]);
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0">
-      <style>
-        html, body, #map { height:100%; margin:0; padding:0; }
-        button {
-          margin-top:6px; padding:4px 8px; border:none;
-          border-radius:4px; background:#2563eb; color:white;
-          font-size:12px; cursor:pointer;
-        }
-      </style>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    </head>
-    <body>
-      <div id="map"></div>
-      <script>
-        var map = L.map('map').setView([48.8566, 2.3522], 3);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+  // HTML for WebView (depends on coords + cities → recalculated on change)
+  const html = useMemo(() => {
+    const markersJS = cities
+      .map(([city, data]) => {
+        const c = coords[city];
+        if (!c) return "";
+        return `
+          L.marker([${c.latitude}, ${c.longitude}]).addTo(map)
+            .bindPopup("<b>${city}</b><br>${data.count} photo${
+          data.count > 1 ? "s" : ""
+        }<br><button onclick=\\"window.ReactNativeWebView.postMessage('${encodeURIComponent(
+          city
+        )}')\\">Voir photos</button>");
+        `;
+      })
+      .join("\n");
 
-        ${markersJS}
-      </script>
-    </body>
-    </html>
-  `;
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0">
+        <style>
+          html, body, #map { height:100%; margin:0; padding:0; }
+          button {
+            margin-top:6px; padding:4px 8px; border:none;
+            border-radius:4px; background:#2563eb; color:white;
+            font-size:12px; cursor:pointer;
+          }
+        </style>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      </head>
+      <body>
+        <div id="map"></div>
+        <script>
+          var map = L.map('map')
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+          }).addTo(map);
 
+          ${markersJS}
+
+          var allCoords = [${Object.values(coords)
+            .map((c) => `[${c.latitude}, ${c.longitude}]`)
+            .join(",")}];
+          if (allCoords.length > 0) {
+            map.fitBounds(allCoords, { padding: [50, 50] });
+          } else {
+            map.setView([48.8566, 2.3522], 4); // fallback Paris
+          }
+
+          window.recenterMap = function(lat, lng) {
+            if (allCoords.length > 0) {
+              map.fitBounds(allCoords, { padding: [50, 50] });
+            } else {
+              map.setView([lat, lng], 4);
+            }
+          };
+        </script>
+      </body>
+      </html>
+    `;
+  }, [cities, coords]);
+
+  // Recenter handler
+  const recenter = () => {
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`
+        window.recenterMap(${center.latitude}, ${center.longitude});
+        true;
+      `);
+    }
+  };
+
+  
+    // Forcer le recalcul / recentrage à chaque ouverture
+  useFocusEffect(
+    useCallback(() => {
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript(`
+          window.recenterMap(${center.latitude}, ${center.longitude});
+          true;
+        `);
+      }
+    }, [center])
+  );
   // Handle messages from WebView (when button clicked)
   const onMessage = useCallback((event: any) => {
     try {
       const city = decodeURIComponent(event.nativeEvent.data);
-      console.log("WebView sent city:", city);
       if (city) setSelectedCity(city);
     } catch (e) {
       console.warn("Invalid city message", e);
@@ -149,16 +202,11 @@ export default function MapScreen() {
     ? cities.find(([c]) => c === selectedCity)?.[1].items || []
     : [];
 
-  useEffect(() => {
-    if (selectedCity) {
-      console.log("Selected city:", selectedCity);
-      console.log("Found photos:", selectedPhotos.length);
-    }
-  }, [selectedCity, selectedPhotos]);
 
   return (
     <View style={{ flex: 1 }}>
       <WebView
+        ref={webViewRef}
         originWhitelist={["*"]}
         source={{ html }}
         style={{ flex: 1 }}
@@ -175,6 +223,11 @@ export default function MapScreen() {
           <Text style={{ marginLeft: 8 }}>Géocodage des villes…</Text>
         </View>
       )}
+
+      {/* Floating recenter button */}
+      <TouchableOpacity style={styles.fab} onPress={recenter}>
+        <Ionicons name="locate" size={20} color="white" />
+      </TouchableOpacity>
 
       {/* Fullscreen gallery */}
       <Modal visible={!!selectedCity} transparent={true}>
@@ -218,15 +271,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
+  fab: {
+    position: "absolute",
+    bottom: 45,
+    right: 20,
+    backgroundColor: "#2563eb",
+    borderRadius: 20,
+    padding: 10,
+    elevation: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   modalContainer: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.95)",
     justifyContent: "center",
     alignItems: "center",
-  },
-  fullImage: {
-    width: "100%",
-    height: "100%",
   },
   closeArea: {
     position: "absolute",
@@ -240,3 +300,4 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
+
