@@ -158,12 +158,13 @@ Visualisation interactive des emplacements de prise de vue avec aperçu des phot
   - Implémentation du système de notifications
   - Supervision technique générale
 
-### 👨‍💻 **Deep** - *Développeur Support*
-- **Rôle** : Développeur support spécialisé
+### 👨‍💻 **Deep** - *Développeur Support et QA*
+- **Rôle** : Développeur support spécialisé et responsable de l’assurance qualité
 - **Responsabilités** :
   - Développement de la page Carte interactive
   - Intégration des API de cartographie
-  - Implémentation des fonctionnalités de géolocalisation
+  - Implémentation des fonctionnalités de géolocalisation et l’association des photos aux coordonnées GPS
+  - Participer aux activités de tests fonctionnels
 
 ### 👨‍💻 **Jules** - *Développeur Support*
 - **Rôle** : Développeur support spécialisé
