@@ -41,27 +41,39 @@ export async function ensurePermissionsAndChannel(): Promise<void> {
   }
 }
 
-// ——— Planifie une notification locale à la date/heure du todo ———
-export async function scheduleTodoNotification(todo: TodoReminder): Promise<string> {
+
+export async function scheduleTodoNotification(
+  todo: TodoReminder,
+  advanceMinutes: number = 5 
+): Promise<string> {
   const [y, m, d] = todo.dateISO.split('-').map(Number);
   const [hh, mm] = todo.time.split(':').map(Number);
   const when = new Date(y, m - 1, d, hh, mm, 0, 0);
 
-  if (when.getTime() <= Date.now()) {
-    throw new Error('La date/heure du rappel est déjà passée.');
+  const now = Date.now();
+  if (when.getTime() <= now) {
+    throw new Error("La date/heure du rappel est déjà passée.");
+  }
+
+  
+  const advanceMs = advanceMinutes * 60 * 1000;
+  let fireAt = new Date(when.getTime() - advanceMs);
+
+  if (fireAt.getTime() <= now) {
+    fireAt = when;
   }
 
   return Notifications.scheduleNotificationAsync({
     content: {
-      title: '🗓️ Rappel Todo',
+      title: "🗓️ Rappel Todo",
       body: todo.title,
-      sound: 'default',
-      data: { todoId: todo.id },
+      sound: "default",
+      data: { todoId: todo.id, plannedFor: when.toISOString() },
     },
-    trigger: { date: when, channelId: 'todos' },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: fireAt,
+      channelId: "todos",
+    },
   });
-}
-export async function cancelTodoNotification(id?: string) {
-  if (!id) return;
-  await Notifications.cancelScheduledNotificationAsync(id);
 }
